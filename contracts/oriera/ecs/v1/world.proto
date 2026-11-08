@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package oriera.ecs.v1;
+
+// L3 object-model contract — mirrors crates/oriera-ecs/src/lib.rs
+// (World / Entity / query / typed event queues).
+//
+// L3 is self-contained: no import from pal or core. The four verbs below are
+// the whole cross-layer surface; column layout, generation counters and the
+// free list stay implementation detail.
+//
+// Stability: additive only (see contracts/README.md).
+
+// A generation-validated handle. Reusing an index never revives an old
+// handle: despawn increments the generation, so stale handles read as absent.
+message Entity {
+  uint32 index = 1;
+  uint32 generation = 2;
+}
+
+// Spawn — reserve n entities; the reply carries the handles in spawn order.
+message Spawn {
+  uint32 count = 1;
+}
+
+message Spawned {
+  repeated Entity entities = 1;
+}
+
+// Query — every listed component type must be present (AND, never OR).
+message Query {
+  repeated string components = 1;  // Rust type names, e.g. "oriera_ecs::Position"
+  uint32 limit = 2;                // 0 = no limit
+}
+
+message QueryResult {
+  repeated Entity entities = 1;
+  uint32 matched = 2;              // total matched before limit was applied
+}
+
+// Publish — typed single-drain event queue (events.v1). One consumer drains;
+// the payload schema is per event type, so p99 latency stays flat.
+message Publish {
+  string event_type = 1;
+  bytes  payload = 2;              // JSON in v1; typed message once codegen lands
+}
+
+// Subscribe — how a consumer declares which event types it drains.
+message Subscribe {
+  repeated string event_types = 1;  // empty = all types
+}
+
+// Serialize — v0.2 shape, agreed here before the implementation lands so the
+// wire format does not drift. Payload bytes are opaque in v1.
+message SerializeRequest {
+  bool include_resources = 1;
+  bool include_events = 2;
+}
+
+message WorldSnapshot {
+  uint32 format_version = 1;
+  bytes  payload = 2;
+  uint64 state_hash = 3;            // World::state_hash(), pinned by golden anchors
+}

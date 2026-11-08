@@ -7,8 +7,11 @@ metadata:
 spec:
   provides:
     - id: oriera.core.scheduler.v1
-      contract: rust:oriera_core::{Scheduler,System,FrameCtx}
+      contract: proto/oriera/core/v1/scheduler.proto
       stability: stable
+      note: Rust mirror is oriera_core::{Scheduler,System,FrameCtx}; the proto is
+        the wire shape (BeginFrame/Grants/FrameCtx/ReportBudget) and the trait
+        stays the live boundary until codegen lands
     - id: oriera.core.timings.v1
       contract: rust:oriera_core::{Scheduler::system_timings,with_budget_ns}
       stability: stable

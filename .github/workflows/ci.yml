@@ -181,6 +181,16 @@ jobs:
       - run: pip install pyyaml
       - name: LayerManifest gate
         run: python scripts/check_manifests.py
+      # 契约腿（#18）：check_manifests 只查 proto 文件在不在，这一条查它能不能
+      # 用——package 与路径、字段号、enum 零值、import，最后 protoc 真编译一遍。
+      - name: protoc (contract compile)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
+      - name: Contract gate
+        run: python scripts/check_contracts.py
+      # 门禁自己的反例测试：删 proto、重号、package 错位都必须红，
+      # 否则「查不出问题还打 OK」会被当成通过。
+      - name: Contract gate self-test
+        run: python -m unittest discover -s scripts -p "test_*.py"
       - name: Document number guard (W8)
         run: python scripts/check_numbers.py
 

@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package oriera.core.v1;
+
+// L2 frame contract — mirrors crates/oriera-core/src/lib.rs
+// (Scheduler / FrameCtx / System / BudgetAllocator).
+//
+// Wire shape only. L2 stays generic over the world type W, so no message
+// here carries world state: a remote scheduler (wasm host, IPC runner) can
+// speak these five shapes and still hand the world to systems locally.
+//
+// Stability: additive only (see contracts/README.md). Field numbers are
+// never reused; deleting a field means `reserved` first.
+
+// One tick's clock and budget, everything a system needs that is not the world.
+message BeginFrame {
+  uint64 frame_index = 1;     // monotonic tick counter (FrameIndex)
+  uint64 timestamp_us = 2;    // wall clock at frame start
+  float  dt_seconds = 3;      // fixed_dt pins it; otherwise wall-clock delta
+  uint64 budget_ns = 4;       // budget this scheduler grades against
+}
+
+// One system's slice of the frame budget (v0.4 BudgetAllocator).
+message ComputeGrant {
+  string system = 1;
+  float  share = 2;           // floored proportional share, 0.0 .. 1.0
+  float  throttle = 3;        // 1.0 = full speed
+  bool   managed = 4;         // false => allocator has no entry, no throttle
+}
+
+message Grants {
+  repeated ComputeGrant grants = 1;
+}
+
+// What each system receives every tick: the frame clock plus its grant.
+message FrameCtx {
+  BeginFrame frame = 1;
+  Grants grants = 2;
+}
+
+// A system asks for work outside its own tick (deferred or off-thread task).
+message SubmitTask {
+  string system = 1;
+  string task = 2;
+  uint32 priority = 3;        // higher first; ties keep registration order
+  uint64 deadline_us = 4;     // 0 = no deadline
+}
+
+message SystemTiming {
+  string system = 1;
+  float  last_ms = 2;         // wall time of the last frame, in run order
+}
+
+// The per-frame answer to "which system ate this frame".
+message ReportBudget {
+  uint64 frame_index = 1;
+  float  frame_ms = 2;
+  float  budget_ms = 3;
+  repeated SystemTiming timings = 4;
+  uint32 overrun_streak = 5;   // consecutive frames above budget*1.2
+  uint64 budget_warnings = 6;  // lifetime count of sustained-overrun warnings
+  float  headroom = 7;         // 1.0 - frame_ms/budget_ms; negative = over
+}
+
+service Scheduler {
+  // Register the frame; the reply hands back the grant table for this tick.
+  rpc StartFrame(BeginFrame) returns (FrameCtx);
+  // Per-system timings go back to the allocator that produced the grants.
+  rpc Report(ReportBudget) returns (ReportBudget);
+  rpc Submit(SubmitTask) returns (SubmitTask);
+}
